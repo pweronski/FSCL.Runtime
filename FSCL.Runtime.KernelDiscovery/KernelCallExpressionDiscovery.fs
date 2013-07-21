@@ -23,23 +23,29 @@ type KernelCallExpressionDiscovery() =
     interface IKernelDiscoveryProcessor with
         member this.Run(obj, step) =
             if (obj :? Expr) then
-                let kernels = new List<KernelDiscoveryResult>()
-                let arguments = new List<KernelArgExpressionType>()
-
                 match obj :?> Expr with
                 // Case k2(k1(args), ...) where k1 doesn't return a tuple value
                 | Patterns.Call(o, m, args) ->
+                    let cg = new RuntimeCallGraph()
+                    let subcg = new List<RuntimeCallGraph>()
+                    let arguments = new List<ArgumentBindingMode>()
                     // Extract sub kernels
                     let subkernels = List.map(fun (e: Expr) -> 
                         try 
-                            let sk = step.Process(e)
-                            kernels.AddRange(sk)
-                            arguments.Add(KernelOutputExpression)
+                            let sk = step.Run(e)                            
+                            arguments.Add(InputKernel(sk.EndPoints.[0], -1))
+                            subcg.Add(sk)
                         with
                             | :? KernelDiscoveryException -> 
-                                arguments.Add(DataExpression(e))) args
-                    kernels.
-                             
+                                arguments.Add(InputExpression(e))) args
+                    for sk in subkernels do
+                        cg.MergeWith(sk)
+                    // Add current kernel    
+                    let currentKernel = 
+                        try 
+                            step.Run(m)
+                        with
+                            | :? CompilerException -> null
                 | Patterns.Let(v, value, body) ->
                     (* 
                      * Check if we have something like:

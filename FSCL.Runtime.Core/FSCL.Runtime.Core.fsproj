@@ -46,7 +46,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="RuntimeException.fs" />
+    <Compile Include="RuntimeCallGraph.fs" />
     <Compile Include="RuntimeCache.fs" />
+    <Compile Include="RuntimeAttributes.fs" />
+    <Compile Include="KernelDiscoveryStep.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CLWrapper\Cloo\Cloo.VS2010.csproj">

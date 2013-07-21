@@ -11,7 +11,7 @@ do()
 
 [<KernelDiscoveryProcessor("FSCL_REFERENCE_DISCOVERY_PROCESSOR", Dependencies = [| "FSCL_CALL_EXPRESSION_DISCOVERY_PROCESSOR" |])>]
 type KernelReferenceDiscovery() =      
-    interface IKernelDiscoveryPRocessors with
+    interface IKernelDiscoveryProcessor with
     
         member this.Run(obj, step) =
             if (obj :? Expr) then
