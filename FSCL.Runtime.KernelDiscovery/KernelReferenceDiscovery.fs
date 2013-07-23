@@ -5,6 +5,7 @@ open FSCL.Runtime
 open System.Collections.Generic
 open System.Reflection
 open Microsoft.FSharp.Quotations
+open FSCL.Compiler.Core.Util
 
 [<assembly:DefaultComponentAssembly>]
 do()
@@ -15,14 +16,17 @@ type KernelReferenceDiscovery() =
     
         member this.Run(obj, step) =
             if (obj :? Expr) then
-                match QuotationAnalysis.GetKernelFromName(expr :?> Expr) with
+                match QuotationAnalysis.GetKernelFromName(obj :?> Expr) with
                 | Some(mi, b) -> 
-                    // Create signleton kernel call graph
-                    let kcg = new ModuleCallGraph()
-                    kcg.AddKernel(new KernelInfo(mi, b))
-                    // Create module
-                    let km = new KernelModule(kcg)
-                    Some(km)
+                    // Create singleton kernel call graph
+                    let cg = new RuntimeCallGraph()
+                    cg.Add(mi)
+                    
+                    // Device attribute
+                    let device = mi.GetCustomAttribute(typeof<DeviceAttribute>)  
+                    if device <> null then
+                        cg.Get(mi).Device <- device :?> DeviceAttribute
+                    Some(cg)
                 | _ ->
                     None
             else

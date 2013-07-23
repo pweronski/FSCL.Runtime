@@ -45,7 +45,8 @@
     <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="KernelReferenceParser.fs" />
+    <Compile Include="KernelMethodInfoDiscovery.fs" />
+    <Compile Include="KernelReferenceDiscovery.fs" />
     <Compile Include="KernelLambdaDiscovery.fs" />
     <Compile Include="KernelCallExpressionDiscovery.fs" />
   </ItemGroup>

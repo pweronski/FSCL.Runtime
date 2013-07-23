@@ -8,4 +8,7 @@ type KernelCompilationException(msg: string) =
     
 type KernelTargetCodeGenerationException(msg: string) =
     inherit System.Exception(msg)
+    
+type KernelSchedulingException(msg: string) =
+    inherit System.Exception(msg)
 

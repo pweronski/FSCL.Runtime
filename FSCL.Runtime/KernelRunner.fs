@@ -6,73 +6,104 @@ open Microsoft.FSharp.Reflection
 open System.Reflection
 open Microsoft.FSharp.Linq.QuotationEvaluation
 open FSCL.Compiler
-open FSCL.Compiler.KernelLanguage
+open System.Collections.Generic
+open System
 open System.Threading
 
 module KernelRunner =
     // The Kernel runner
-    type internal Runner(compiler, metric) =    
+    type internal Runner(compiler, configuration, metric) =    
         
         member val KernelManager = new KernelManager(compiler, metric) with get
+        member val KernelDiscovery = new KernelDiscoveryStep(RuntimeBuilder.Build(configuration)) with get
         
-        member this.RunOpenCL(kernel:FSCLKernelData,
-                              instanceIndex:int, 
-                              argumentsInfo:(ParameterInfo * int * Expr)[], 
+        member this.RunOpenCL(graph:RuntimeCallGraph,
                               globalSize:int array, 
                               localSize:int array) =
-            let globalDataStorage = this.KernelManager.GlobalDataStorage
 
-            let arguments = Array.map (fun (p, d, e:Expr) -> e.EvalUntyped()) argumentsInfo                
+            // The storage for buffers potentially used by successive kernels in the call graph flow
+            let bufferBinding = new Dictionary<MethodInfo, Dictionary<String, ComputeMemory>>()
 
-            // Fix: here to be called INSTANTIATE on a metric to get the device to use
-            let kernelInstance = kernel.Instances.[instanceIndex]
-            let queue = globalDataStorage.Devices.[kernelInstance.DeviceIndex.Value].Queue
-            let context = globalDataStorage.Devices.[kernelInstance.DeviceIndex.Value].Context
-            // FIX: determine best read/write strategy
+            // Foreach kernel in the dependency order
+            for kernel in graph.Kernels do
+                // Get runtime cache data
+                match kernel.RuntimeCacheData with
+                | Some(device, kernelInfo, compiledKernel) ->
+                    let mutable argIndex = 0
+                    // Foreach argument of the kernel
+                    for par in  kernelInfo.Info.ParameterInfo do
+                        // Get the relative binding (if exists)
+                        if kernel.ArgumentsInputBinding.ContainsKey(par.Key) then                            
+                            // If the argument is bound to an expression
+                            let argBinding = kernel.ArgumentsInputBinding.[par.Key]
+                            match argBinding with
+                            | InputExpressionBinding(e) ->
+                                // Evaluate expression
+                                let o = e.EvalUntyped()
+                                // If the parameter requires a buffer
+                                if par.Value.Info.ParameterType.IsArray then
+                                    // Check if read or read_write modeS
+                                    let matchingParameter = kernelInfo.Info.ParameterInfo.[par.Value.Info.Name]
+                                    let access = matchingParameter.Access
+                                    let mustInitBuffer =
+                                        ((matchingParameter.AddressSpace = KernelParameterAddressSpace.GlobalSpace) ||
+                                            (matchingParameter.AddressSpace = KernelParameterAddressSpace.ConstantSpace)) &&
+                                        ((access = KernelParameterAccessMode.ReadOnly) || 
+                                            (access = KernelParameterAccessMode.ReadWrite))                                    
+                                    // Create buffer and eventually init it, and set kernel arg
+                                    let t = par.Value.Info.ParameterType.GetElementType()
+                                    let buffer = BufferTools.WriteBuffer(t, device.Context, device.Queue, o, par.Value.SizeParameters.Length, mustInitBuffer)   
+                                    compiledKernel.Kernel.SetMemoryArgument(argIndex, buffer.Value)                                        
+                                    // Store association between parameter, array and buffer object
+                                    // (only if the returnBinding is OutputKernel and the return parameter is 
+                                    // the one associated to this buffer, that is this buffer will be used by another kernel later)
+                                    match kernel.ReturnBinding with
+                                    | OutputKernelBinding(mi, pName) ->
+                                        if par.Value.IsReturnParameter then
+                                            if not (bufferBinding.ContainsKey(kernel.ID)) then
+                                                bufferBinding.Add(kernel.ID, new Dictionary<String, ComputeMemory>())
+                                            bufferBinding.[kernel.ID].Add(par.Key, buffer.Value)
+                                    | _ ->
+                                        ()
+                                else
+                                    compiledKernel.Kernel.SetValueArgumentAsObject(argIndex, o)
+                                    
+                            | InputKernelBinding(mi, pName) ->
+                                let inputBuffer = bufferBinding.[mi].[pName]
+             //-->              // We should AVOID COPY
+                                // Check if read or read_write mode
+                                let matchingParameter = kernelInfo.Info.ParameterInfo.[par.Value.Info.Name]
+                                let access = matchingParameter.Access                               
+                                // Create buffer and eventually init it, and set kernel arg
+                                let t = par.Value.Info.ParameterType.GetElementType()
+                                let buffer = BufferTools.CopyBuffer(t, device.Context, device.Queue, inputBuffer)   
+                                compiledKernel.Kernel.SetMemoryArgument(argIndex, buffer.Value)                                        
+                                // Store association between parameter, array and buffer object
+                                // (only if the returnBinding is OutputKernel and the return parameter is 
+                                // the one associated to this buffer, that is this buffer will be used by another kernel later)
+                                match kernel.ReturnBinding with
+                                | OutputKernelBinding(mi, pName) ->
+                                    if par.Value.IsReturnParameter then
+                                        if not (bufferBinding.ContainsKey(kernel.ID)) then
+                                            bufferBinding.Add(kernel.ID, new Dictionary<String, ComputeMemory>())
+                                        bufferBinding.[kernel.ID].Add(par.Key, buffer.Value)
+                                | _ ->
+                                    ()
 
-            // For each parameter, create buffer (if array), write it and set kernel arg   
-            let additionalArgCount = ref 0     
-            let paramObjectBufferMap = new System.Collections.Generic.Dictionary<string, (System.Object * ComputeMemory)>()
-
-            let argIndex = ref 0
-            Array.iteri (fun pIndex (par:ParameterInfo, dim:int, a:Expr) ->
-                if par.ParameterType.IsArray then
-                    let o = arguments.[pIndex]
-                    // Check if constant buffer. In this case we pass the dimension (sizeof) the array and not a real buffer
-                    if kernel.Info.ParameterInfo.[par.Name].AddressSpace = KernelParameterAddressSpace.LocalSpace then
-                        let size = (o.GetType().GetProperty("LongLength").GetValue(o) :?> int64) * 
-                                    (int64 (System.Runtime.InteropServices.Marshal.SizeOf(o.GetType().GetElementType())))
-                        // Set kernel arg
-                        kernelInstance.Kernel.SetLocalArgument(!argIndex, size) 
-                    else
-                        // Check if read or read_write modeS
-                        let matchingParameter = kernel.Info.ParameterInfo.[par.Name]
-                        let access = matchingParameter.Access
-                        let mustInitBuffer =
-                            ((matchingParameter.AddressSpace = KernelParameterAddressSpace.GlobalSpace) ||
-                                (matchingParameter.AddressSpace = KernelParameterAddressSpace.ConstantSpace)) &&
-                            ((access = KernelParameterAccessMode.ReadOnly) || 
-                                (access = KernelParameterAccessMode.ReadWrite))
-
-                        // Create buffer and eventually init it
-                        let t = par.ParameterType.GetElementType()
-                        let buffer = BufferTools.WriteBuffer(t, context, queue, o, dim, mustInitBuffer)                            
-                 
-                        // Stor association between parameter, array and buffer object
-                        paramObjectBufferMap.Add(par.Name, (o, buffer.Value))
-
-                        // Set kernel arg
-                        kernelInstance.Kernel.SetMemoryArgument(!argIndex, buffer.Value)  
-
-                    // Set additional args for array params (dimensions) 
-                    for dimension = 0 to dim - 1 do
-                        let sizeOfDim = o.GetType().GetMethod("GetLength").Invoke(o, [| dimension |]) :?> int
-                        kernelInstance.Kernel.SetValueArgument<int>(argumentsInfo.Length + !additionalArgCount + dimension, sizeOfDim)
-                    additionalArgCount := !additionalArgCount + dim
-                else
-                    kernelInstance.Kernel.SetValueArgumentAsObject(!argIndex, arguments.[pIndex])
-            
-                argIndex := !argIndex + 1) (argumentsInfo)
+                            | NoInputBinding ->                                
+                                // If the parameter requires a buffer (should be local)
+                                if par.Value.Info.ParameterType.IsArray then
+                                    // Check if local buffer. In this case we pass the dimension (sizeof) the array and not a real buffer
+                                    if kernelInfo.Info.ParameterInfo.[par.Value.Info.Name].AddressSpace = KernelParameterAddressSpace.LocalSpace then
+                                        let size = (o.GetType().GetProperty("LongLength").GetValue(o) :?> int64) * 
+                                                    (int64 (System.Runtime.InteropServices.Marshal.SizeOf(o.GetType().GetElementType())))
+                                        // Set kernel arg
+                                        kernelInstance.Kernel.SetLocalArgument(!argIndex, size) 
+                                // If not (should be a size parameter)
+                                let sizeOfDim = o.GetType().GetMethod("GetLength").Invoke(o, [| dimension |]) :?> int
+                                kernelInstance.Kernel.SetValueArgument<int>(argumentsInfo.Length + !additionalArgCount + dimension, sizeOfDim)
+                        // Next arg
+                        argIndex <- argIndex + 1
 
             // Run kernel
             let offset = Array.zeroCreate<int64>(globalSize.Length)
@@ -133,38 +164,34 @@ module KernelRunner =
                         else
                             work.Invoke(null, Array.append arguments [| container |]) |> ignore
         
-        member this.Run(kernelModule: KernelModule, 
-                        globalSize: int array, 
-                        localSize: int array, 
-                        mode: KernelRunningMode, 
-                        fallback: bool) = 
-            // Ask kernel manager to retrieve the proper executable kernel instance or to create it
-            let kernelInstance = this.KernelManager.FindOrAdd(kernelModule, mode, fallback)
-            match mode with
-            | KernelRunningMode.OpenCL ->
-                this.RunOpenCL(kernelInstance, 0, argumentsInfo, globalSize, localSize)
-            | KernelRunningMode.Multithread ->
-                this.RunMultithread(kernelInstance, argumentsInfo, globalSize, localSize, true)
-            | _ ->
-                this.RunMultithread(kernelInstance, argumentsInfo, globalSize, localSize, false)
-
         // Run a kernel through a quoted kernel call        
         member this.Run(expr: Expr, 
                         globalSize: int array, 
                         localSize: int array, 
                         mode: KernelRunningMode, 
                         fallback: bool) =                     
-            // Compile the expression
-            let kernelModule = this.KernelManager.Compiler.Compile(expr) :?> KernelModule
-            this.Run(kernelModule, globalSize, localSize, mode, fallback)
+            // Execute kernel discovery to get the call graph
+            let runtimeCallGraph = this.KernelDiscovery.Run(expr)
+            this.KernelManager.CompileAndCache(runtimeCallGraph, mode, fallback)
+
+            match mode with
+            | KernelRunningMode.OpenCL ->
+                this.RunOpenCL(runtimeCallGraph, globalSize, localSize)
+            | KernelRunningMode.Multithread ->
+                this.RunMultithread(runtimeCallGraph, globalSize, localSize, true)
+            | _ ->
+                this.RunMultithread(runtimeCallGraph, globalSize, localSize, false)
           
     
     // Global kernel runner
-    let internal kernelRunner = new Runner(new Compiler(), None)
+    let internal kernelRunner = new Runner(new Compiler(), RuntimeConfigurationManager.LoadConfiguration(), None)
 
     // Function to set custom kernel manager
     let Init(compiler, metric) =
-        kernelRunner = new Runner(compiler, metric)
+        kernelRunner = new Runner(compiler, RuntimeConfigurationManager.LoadConfiguration(), metric)
+        
+    let Init(compiler, conf, metric) =
+        kernelRunner = new Runner(compiler, conf, metric)
 
     // List available devices
     let ListDevices() = 

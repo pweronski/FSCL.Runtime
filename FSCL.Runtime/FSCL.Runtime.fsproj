@@ -39,8 +39,13 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="RuntimeConfiguration.fs" />
+    <Compile Include="RuntimeBuilder.fs" />
+    <Compile Include="RuntimeConfigurationManager.fs" />
     <Compile Include="LanguageExtensions.fs" />
     <Compile Include="MultithreadSupport.fs" />
     <Compile Include="KernelManagerTools.fs" />
@@ -72,6 +77,16 @@
     <ProjectReference Include="..\Compiler\Util\FSCL.Compiler.Core.Util.fsproj">
       <Name>FSCL.Compiler.Core.Util</Name>
       <Project>{2089ba93-e786-42e3-b717-58105c53bb7a}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\FSCL.Runtime.Core\FSCL.Runtime.Core.fsproj">
+      <Name>FSCL.Runtime.Core</Name>
+      <Project>{a7679b4f-c698-490d-a1e8-c60866d6939e}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\FSCL.Runtime.KernelDiscovery\FSCL.Runtime.KernelDiscovery.fsproj">
+      <Name>FSCL.Runtime.KernelDiscovery</Name>
+      <Project>{c1194487-c846-4a43-8dad-5bebbfac66f2}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\FSCL.Runtime.Metric\FSCL.Runtime.Metric.fsproj">

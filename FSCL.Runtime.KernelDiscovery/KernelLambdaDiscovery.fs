@@ -15,7 +15,9 @@ type KernelLambdaDiscovery() =
             if (obj :? Expr) then
                 match QuotationAnalysis.LambdaToMethod(obj :?> Expr) with
                 | Some(mi, b) -> 
-                    Some([ (mi, []) ])
+                    let cg = new RuntimeCallGraph()
+                    cg.Add(mi, obj :?> Expr)
+                    Some(cg)
                 | _ ->
                     None
             else

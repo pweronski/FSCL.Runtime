@@ -33,4 +33,18 @@ type KernelDiscoveryProcessorAttribute(i: string) =
 [<AttributeUsage(AttributeTargets.Assembly)>]
 type DefaultComponentAssembly() =
     inherit Attribute()
+    
+// Kernel run mode
+type KernelRunningMode =
+| OpenCL
+| Multithread
+| Sequential
+
+[<AllowNullLiteral>]
+type DeviceAttribute(platform: int, device: int) =
+    inherit Attribute()
+
+    member val Platform = platform with get
+    member val Device = device with get
+
   

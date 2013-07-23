@@ -1,4 +1,4 @@
-﻿namespace FSCL.Runtime.Configuration
+﻿namespace FSCL.Runtime
 
 open FSCL.Runtime
 open FSCL.Runtime.KernelDiscovery

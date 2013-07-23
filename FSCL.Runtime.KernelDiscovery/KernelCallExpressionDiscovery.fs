@@ -25,27 +25,32 @@ type KernelCallExpressionDiscovery() =
             if (obj :? Expr) then
                 match obj :?> Expr with
                 // Case k2(k1(args), ...) where k1 doesn't return a tuple value
-                | Patterns.Call(o, m, args) ->
+                | Patterns.Call(o, mi, args) ->
                     let cg = new RuntimeCallGraph()
-                    let subcg = new List<RuntimeCallGraph>()
-                    let arguments = new List<ArgumentBindingMode>()
-                    // Extract sub kernels
-                    let subkernels = List.map(fun (e: Expr) -> 
+                    let arguments = new List<Object>()
+                    // Extract sub kernels and merge them with the current call graph
+                    List.iter(fun (e: Expr) -> 
                         try 
                             let sk = step.Run(e)                            
-                            arguments.Add(InputKernel(sk.EndPoints.[0], -1))
-                            subcg.Add(sk)
+                            arguments.Add(sk.EndPoints.[0].ID)
+                            cg.MergeWith(sk)
                         with
                             | :? KernelDiscoveryException -> 
-                                arguments.Add(InputExpression(e))) args
-                    for sk in subkernels do
-                        cg.MergeWith(sk)
-                    // Add current kernel    
-                    let currentKernel = 
-                        try 
-                            step.Run(m)
-                        with
-                            | :? CompilerException -> null
+                                arguments.Add(e)) args
+                    // Add current kernel to the call graph
+                    try 
+                        let current = step.Run(mi)
+                        cg.MergeWith(current)
+                        // Add connections
+                        for argIndex = 0 to arguments.Count - 1 do
+                            if arguments.[argIndex] :? MethodInfo then
+                                cg.SetInputBinding(current.Kernels.[0].ID, mi.GetParameters().[argIndex].Name, 
+                                                   InputKernelBinding(arguments.[argIndex] :?> MethodInfo, "0"))
+                                cg.SetReturnBinding(arguments.[argIndex] :?> MethodInfo, OutputKernelBinding(current.Kernels.[0].ID, [ mi.GetParameters().[argIndex].Name ]))
+                    with
+                        | :? KernelDiscoveryException -> 
+                            raise (KernelCompilationException("Invalid kernel expression: call to " + mi.Name))
+                    Some(cg)
                 | Patterns.Let(v, value, body) ->
                     (* 
                      * Check if we have something like:
@@ -59,40 +64,42 @@ type KernelCallExpressionDiscovery() =
                     if v.Name = "tupledArg" then
                         let lifted = LiftArgExtraction(body)
                         match lifted with
-                        | Patterns.Call(o, mi, args) ->                                       
-                            let subkernel = 
-                                try 
-                                    engine.Process(value)
-                                with
-                                    | :? CompilerException -> null
-                            // Add the subkernel to the call graph
-                            if (subkernel <> null) then
-                                kcg.MergeWith(subkernel.Source)
-                            // Get endpoints
-                            let endpoints = kcg.EndPoints
-                            // Add the current kernel
-                            let currentKernel = 
-                                try 
-                                    engine.Process(mi)
-                                with
-                                    | :? CompilerException -> null
-                            if currentKernel = null then
-                                None
-                            else
-                                kcg.AddKernel(kcg.GetKernel(currentKernel.Source.KernelIDs.[0]))
-                                // Setup connections ret-type -> parameter                            
-                                if subkernel <> null then   
-                                    let retTypes =
-                                        if FSharpType.IsTuple(subkernel.Source.EndPoints.[0].ReturnType) then
-                                            FSharpType.GetTupleElements(subkernel.Source.EndPoints.[0].ReturnType)
-                                        else
-                                            [| subkernel.Source.EndPoints.[0].ReturnType |]
-                                    for i = 0 to retTypes.Length - 1 do                     
-                                        kcg.AddConnection(
-                                            endpoints.[0], 
-                                            currentKernel.Source.KernelIDs.[0], 
-                                            ReturnValue(i), ParameterIndex(i))
-                                Some(new KernelModule(kcg))
+                        | Patterns.Call(o, mi, args) ->     
+                            let cg = new RuntimeCallGraph()
+                            let argument = ref (new Object())
+                            // Extract sub kernels and merge them with the current call graph (one only argument if arrived here)
+                            try 
+                                let sk = step.Run(value)                            
+                                argument := sk.EndPoints.[0].ID :> obj
+                                cg.MergeWith(sk)
+                            with
+                                | :? KernelDiscoveryException -> 
+                                    argument := args.[0] :> obj
+                            // Add current kernel to the call graph
+                            try 
+                                let current = step.Run(mi)
+                                cg.MergeWith(current)
+                                // Add connections
+                                let retTypes =
+                                    if FSharpType.IsTuple((!argument :?> MethodInfo).ReturnType) then
+                                        FSharpType.GetTupleElements((!argument :?> MethodInfo).ReturnType)
+                                    else
+                                        [| (!argument :?> MethodInfo).ReturnType |]
+                                for retTypeIndex = 0 to retTypes.Length - 1 do                                    
+                                    cg.SetInputBinding(current.Kernels.[0].ID, mi.GetParameters().[retTypeIndex].Name, 
+                                                        InputKernelBinding(!argument :?> MethodInfo, retTypeIndex.ToString()))
+                                cg.SetReturnBinding(!argument:?> MethodInfo, 
+                                                    OutputKernelBinding(
+                                                        current.Kernels.[0].ID,
+                                                        List.ofSeq(seq {
+                                                            for i = 0 to retTypes.Length - 1 do
+                                                                yield mi.GetParameters().[i].Name
+                                                        })))
+                                // Return
+                                Some(cg)                                
+                            with
+                                | :? KernelDiscoveryException -> 
+                                    raise (KernelCompilationException("Invalid kernel expression: call to " + mi.Name))
                         | _ ->
                             None
                     else
