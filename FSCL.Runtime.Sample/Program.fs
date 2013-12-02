@@ -170,11 +170,16 @@ let main argv =
             Console.WriteLine("  First accelerated vector sum returned a wrong result!")
         else
             Console.WriteLine("  First accelerated vector sum execution time (kernel is compiled): " + timer.ElapsedMilliseconds.ToString() + "ms")
-            
+
+            // Re-execute vector add exploiting runtime caching for kernels    
+            timer.Restart()
+            c <- <@ Array.map2 (fun el1 el2 -> el1 + el2) a b @>.RunOpenCL(size, 64)
+            timer.Stop()
+            Console.WriteLine("  Second accelerated vector sum execution time (kernel is taken from cache): " + timer.ElapsedMilliseconds.ToString() + "ms")
+
         // Expression of multiple kernels
         Console.WriteLine("")
         Console.WriteLine("# Testing expressions made of multiple kernels (matrix multiplication followed by a sum) on the first device")
-
         timer.Start()
         <@ worksize(
             MatrixAdd(
@@ -182,9 +187,8 @@ let main argv =
                     MatrixMult(am, bm), 
                     [| 64; 64 |], [| 8; 8 |]), 
                 cm, dm),
-            [| 64 |], [| 8 |]) @>.Run() |> ignore
-        timer.Stop()
-        
+            [| 64 |], [| 8 |]) @>.Run()
+        timer.Stop()        
         // Check result
         let mutable isResultCorrect = true
         for i = 0 to correctMapResult.Length - 1 do
@@ -194,6 +198,19 @@ let main argv =
             Console.WriteLine("  First accelerated vector sum returned a wrong result!")
         else
             Console.WriteLine("  First accelerated vector sum execution time (kernel is compiled): " + timer.ElapsedMilliseconds.ToString() + "ms")
+
+            // Re-execute vector add exploiting runtime caching for kernels    
+            timer.Restart()
+            <@ worksize(
+                MatrixAdd(
+                    worksize(
+                        MatrixMult(am, bm), 
+                        [| 64; 64 |], [| 8; 8 |]), 
+                    cm, dm),
+                [| 64 |], [| 8 |]) @>.Run()
+            timer.Stop()
+            Console.WriteLine("  Second accelerated vector sum execution time (kernel is compiled): " + timer.ElapsedMilliseconds.ToString() + "ms")
+
             
             
     (*
@@ -219,6 +236,9 @@ let main argv =
     Console.WriteLine("OpenCL result: " + result.ToString() + " - Correct result: " + correctValue.ToString())
     0
     *)
+    Console.WriteLine("Press any key to exit...")
+    Console.Read() |> ignore
     0
+
 
     
