@@ -85,7 +85,7 @@ let main argv =
             Console.WriteLine("- Platform " + platformIndex.ToString())
             for (device, deviceName) in platforms.[platformIndex] do
                 Console.WriteLine("  - Device " + device.ToString() + ": " + deviceName)
-       (*       
+       
         // Simple vector add
         Console.WriteLine("")
         Console.WriteLine("# Testing simple vector add with OpenCL on the first device")
@@ -170,11 +170,11 @@ let main argv =
             Console.WriteLine("  First accelerated vector sum returned a wrong result!")
         else
             Console.WriteLine("  First accelerated vector sum execution time (kernel is compiled): " + timer.ElapsedMilliseconds.ToString() + "ms")
-            *)
+            
         // Expression of multiple kernels
         Console.WriteLine("")
         Console.WriteLine("# Testing expressions made of multiple kernels (matrix multiplication followed by a sum) on the first device")
-        let t = <@ MatrixMult(am, bm) @>.Run( [| 64; 64 |], [| 8; 8 |])
+
         timer.Start()
         <@ worksize(
             MatrixAdd(
