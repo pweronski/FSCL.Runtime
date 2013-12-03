@@ -489,7 +489,8 @@ namespace Cloo
         /// <summary> </summary>
         AllocateHostPointer = 1 << 4,
         /// <summary> </summary>
-        CopyHostPointer = 1 << 5
+        CopyHostPointer = 1 << 5,
+        UsePersistentMemAMD = 1 << 6
     }
 
     /// <summary>

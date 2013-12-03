@@ -24,14 +24,14 @@ open System.Collections.Generic
         let dstBuffer = ref None
         if srcInfo.IsHostPtr then
             srcPtr := Some(TransferTools.AllocateHostPtr(currSize))
-            do TransferTools.InitializeHostPtr(currSize, (!srcPtr).Value)
+            do TransferTools.InitializeHostPtr<float32>(currSize, (!srcPtr).Value, 2.0f)
         else
-            srcBuffer := Some(TransferTools.AllocateBuffer(computeContext, currSize, srcInfo))
-            do TransferTools.InitializeBuffer(computeQueue, currSize, srcInfo, (!srcBuffer).Value)
+            srcBuffer := Some(TransferTools.AllocateBuffer(computeContext, currSize, srcInfo, [||]))
+            do TransferTools.InitializeBuffer<float32>(computeQueue, currSize, srcInfo, (!srcBuffer).Value, 2.0f)
         if dstInfo.IsHostPtr then
             dstPtr := Some(TransferTools.AllocateHostPtr(currSize))
         else
-            dstBuffer := Some(TransferTools.AllocateBuffer(computeContext, currSize, dstInfo))
+            dstBuffer := Some(TransferTools.AllocateBuffer(computeContext, currSize, dstInfo, [||]))
 
         // Run test
         let (time, iterations) = Tools.ExcuteFor duration (fun () ->
@@ -41,9 +41,9 @@ open System.Collections.Generic
                 else
                     TransferTools.HostPtrToBuffer(computeContext, computeQueue, currSize, validate, dstInfo, (!srcPtr).Value, (!dstBuffer).Value)
             elif dstInfo.IsHostPtr then
-                TransferTools.BufferToHostPtr(computeContext, computeQueue, currSize, validate, srcInfo, (!srcBuffer).Value, (!dstPtr).Value)  
+                TransferTools.BufferToHostPtr<float32>(computeContext, computeQueue, currSize, validate, srcInfo, (!srcBuffer).Value, (!dstPtr).Value, 2.0f)  
             else  
-                TransferTools.BufferToBuffer(computeContext, computeQueue, currSize, validate, srcInfo, dstInfo, (!srcBuffer).Value, (!dstBuffer).Value))
+                TransferTools.BufferToBuffer<float32>(computeContext, computeQueue, currSize, validate, srcInfo, dstInfo, (!srcBuffer).Value, (!dstBuffer).Value, 2.0f))
         
         (time, iterations * currSize)
 

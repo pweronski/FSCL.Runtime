@@ -5,12 +5,12 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>089ed7de-236a-4c7d-8804-0c70c4c2a3f5</ProjectGuid>
+    <ProjectGuid>24bb6a57-2202-4b89-8804-07ce0d9d162f</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>MetricTester</RootNamespace>
-    <AssemblyName>MetricTester</AssemblyName>
+    <RootNamespace>FSCL.Runtime.HelloWorld</RootNamespace>
+    <AssemblyName>FSCL.Runtime.HelloWorld</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <Name>MetricTester</Name>
+    <Name>FSCL.Runtime.HelloWorld</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,7 +21,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile>bin\Debug\MetricTester.XML</DocumentationFile>
+    <DocumentationFile>bin\Debug\FSCL.Runtime.HelloWorld.XML</DocumentationFile>
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
@@ -32,7 +32,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile>bin\Release\MetricTester.XML</DocumentationFile>
+    <DocumentationFile>bin\Release\FSCL.Runtime.HelloWorld.XML</DocumentationFile>
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
@@ -49,29 +49,9 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\tempfscl\FSCL.Runtime\FSCL.Runtime.Metric.TransferEnergyMetric\FSCL.Runtime.Metric.DataTransferMetric.fsproj">
-      <Name>FSCL.Runtime.Metric.DataTransferMetric</Name>
-      <Project>{a84732b7-8090-4259-b0b6-106a330df59d}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\CLWrapper\Cloo\Cloo.VS2010.csproj">
-      <Name>Cloo.VS2010</Name>
-      <Project>{656e96ce-2587-4ccc-a4db-06d36267133a}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Compiler\Core\FSCL.Compiler.Core.fsproj">
-      <Name>FSCL.Compiler.Core</Name>
-      <Project>{7635ade1-ac00-4587-8117-3faa15be9318}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\FSCL.Runtime.MetricTools\FSCL.Runtime.MetricTools.fsproj">
-      <Name>FSCL.Runtime.MetricTools</Name>
-      <Project>{cb4c5f5a-cdfd-4372-a565-bc7d2e362e22}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\FSCL.Runtime.Metric\FSCL.Runtime.Metric.fsproj">
-      <Name>FSCL.Runtime.Metric</Name>
-      <Project>{a329e02a-c967-4f11-99bf-cf6c16a009af}</Project>
+    <ProjectReference Include="..\Compiler\Language\FSCL.Compiler.Core.Language.fsproj">
+      <Name>FSCL.Compiler.Core.Language</Name>
+      <Project>{02cc39bd-a326-49f6-b5e6-2987eada1ba2}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\FSCL.Runtime\FSCL.Runtime.fsproj">

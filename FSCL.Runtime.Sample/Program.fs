@@ -223,7 +223,7 @@ let main argv =
     let mutable numberOfReduceWorkers = size / 2
     while numberOfReduceWorkers >= 4 do
         <@@ Vector4Reduce(notused(c), numberOfReduceWorkers * 2) @@>.Run(numberOfReduceWorkers, 4)
-        numberOfReduceWorkers <- numberOfReduceWorkers / 2
+        numberOfReduceWorkers <-  numberOfReduceWorkers / 2
     <@@ Vector4Reduce(notused(c), numberOfReduceWorkers * 2) @@>.Run(numberOfReduceWorkers, 2)
 
     let result = c.[0].x + c.[0].y + c.[0].z + c.[0].w + c.[1].x + c.[1].y + c.[1].z + c.[1].w

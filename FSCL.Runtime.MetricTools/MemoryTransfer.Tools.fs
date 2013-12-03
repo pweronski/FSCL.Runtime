@@ -43,100 +43,145 @@ module MemoryUtil =
     extern int memcmp(IntPtr ptr1, IntPtr ptr2, int count);
     
 module TransferTools =
-    let AllocateHostPtr(currSize) =
-        ref (Array.zeroCreate<float32>(currSize / sizeof<float32>))
+    let AllocateHostPtr<'T>(currSize) =
+        ref (Array.zeroCreate<'T>(currSize / sizeof<'T>))
             
-    let AllocateBuffer(computeContext, currSize, info:TransferEndpoint) =
-        ref (new ComputeBuffer<float32>(computeContext, info.Flags, [| (int64)(currSize / sizeof<float32>) |]))
+    let AllocateBuffer<'T when 'T: (new: unit -> 'T) and 'T: struct and 'T :> ValueType>(computeContext, 
+                                                                                         currSize, 
+                                                                                         info: TransferEndpoint, 
+                                                                                         data: 'T array) =
+        if data.Length = 0 then
+            ref (new ComputeBuffer<'T>(computeContext, info.Flags, [| (int64)(currSize / sizeof<'T>) |]))
+        else
+            ref (new ComputeBuffer<'T>(computeContext, info.Flags, data, true))
 
-    let InitializeHostPtr(currSize, source: float32[] ref) =
+    let InitializeHostPtr<'T>(currSize, 
+                              source: 'T[] ref, 
+                              defValue) =
         // Init source
-        Array.fill (!source) 0 ((!source).Length) 2.0f
+        Array.fill (!source) 0 ((!source).Length) defValue
         
-    let InitializeBuffer(computeQueue:ComputeCommandQueue, currSize, info:TransferEndpoint, src:ComputeBuffer<float32> ref) =
-        let initializer = Array.create<float32> (currSize / sizeof<float32>) 2.0f
-        computeQueue.WriteToBuffer<float32>(initializer, !src, true, null)
+    let InitializeBuffer<'T when 'T: (new: unit -> 'T) and 'T: struct and 'T :> ValueType>(computeQueue: ComputeCommandQueue, 
+                                                                                           currSize, 
+                                                                                           info: TransferEndpoint, 
+                                                                                           src: ComputeBuffer<'T> ref, 
+                                                                                           defValue) =
+        let initializer = Array.create<'T> (currSize / sizeof<'T>) defValue
+        computeQueue.WriteToBuffer<'T>(initializer, !src, true, null)
 
     // Test copy from host ptr to host ptr
-    let HostPtrToHostPtr(currSize, validate, src: float32[] ref, dst: float32[] ref) =         
+    let HostPtrToHostPtr<'T>(currSize, 
+                             validate, 
+                             src: 'T[] ref, 
+                             dst: 'T[] ref) =         
         // From array to array, via memcpy, including allocation and initialization
-        dst := Array.copy(!src)   
+        let srcHandle = GCHandle.Alloc(!src, GCHandleType.Pinned)
+        let dstHandle = GCHandle.Alloc(!dst, GCHandleType.Pinned)
+        let srcPtr = srcHandle.AddrOfPinnedObject()
+        let dstPtr = dstHandle.AddrOfPinnedObject()
+        MemoryUtil.RtlMoveMemory(dstPtr, srcPtr, (uint32)currSize)                                  
+        if (srcHandle.IsAllocated) then
+            srcHandle.Free()
+        if (dstHandle.IsAllocated) then
+            dstHandle.Free()
 
     // Test copy from host ptr to buffer
-    let HostPtrToBuffer(computeContext:ComputeContext, computeQueue:ComputeCommandQueue, currSize, validate, dstInfo:TransferEndpoint, src: float32[] ref, dst: ComputeBuffer<float32> ref) =
+    let HostPtrToBuffer<'T when 'T: (new: unit -> 'T) and 'T: struct and 'T :> ValueType and 'T : equality>(computeContext: ComputeContext, 
+                                                                                                            computeQueue: ComputeCommandQueue, 
+                                                                                                            currSize, 
+                                                                                                            validate, 
+                                                                                                            dstInfo: TransferEndpoint, 
+                                                                                                            src: 'T[] ref, 
+                                                                                                            dst: ComputeBuffer<'T> ref) =
         if dstInfo.ShouldMap then
             // From array to buffer, via map and memcpy, including allocation and initialization
             let sourceHandle = GCHandle.Alloc(!src, GCHandleType.Pinned)
             try 
                 let sourcePtr = sourceHandle.AddrOfPinnedObject()
-                let destPtrFava = computeQueue.Map<float32>(!dst, true, ComputeMemoryMappingFlags.Write, (int64)0, (int64)(currSize / sizeof<float32>), null)
-                MemoryUtil.RtlMoveMemory(sourcePtr, destPtrFava, (uint32)currSize)                                   
-                computeQueue.Unmap(!dst, ref destPtrFava, null)                             
+                let destPtr = computeQueue.Map<'T>(!dst, true, ComputeMemoryMappingFlags.Write, (int64)0, (int64)(currSize / sizeof<'T>), null)
+                MemoryUtil.RtlMoveMemory(destPtr, sourcePtr, (uint32)currSize)                                   
+                computeQueue.Unmap(!dst, ref destPtr, null)                             
             finally
                 if (sourceHandle.IsAllocated) then
                     sourceHandle.Free()
         else
             // From array to buffer, via writeBuffer, including allocation and initialization
-            computeQueue.WriteToBuffer<float32>(!src, !dst, true, null)
+            computeQueue.WriteToBuffer<'T>(!src, !dst, true, null)
                         
         // Validate            
         if validate then
-            let finalizer = Array.zeroCreate<float32>(currSize / sizeof<float32>)
-            computeQueue.ReadFromBuffer<float32>(!dst, ref finalizer, true, null)
+            let finalizer = Array.zeroCreate<'T>(currSize / sizeof<'T>)
+            computeQueue.ReadFromBuffer<'T>(!dst, ref finalizer, true, null)
             Array.iteri (fun i element -> 
                 if element <> finalizer.[i] then
                     raise (new TransferException("Source and destination do not match"))) !src   
 
     // Test copy from buffer to host ptr
-    let BufferToHostPtr<'T>(computeContext:ComputeContext, computeQueue:ComputeCommandQueue, currSize, validate, srcInfo:TransferEndpoint, src: ComputeBuffer<float32> ref, dst: float32[] ref) =
+    let BufferToHostPtr<'T when 'T: (new: unit -> 'T) and 'T: struct and 'T :> ValueType and 'T: equality>(computeContext: ComputeContext, 
+                                                                                                           computeQueue: ComputeCommandQueue, 
+                                                                                                           currSize, 
+                                                                                                           validate, 
+                                                                                                           srcInfo: TransferEndpoint, 
+                                                                                                           src: ComputeBuffer<'T> ref, 
+                                                                                                           dst: 'T[] ref,
+                                                                                                           defValue : 'T) =
         if srcInfo.ShouldMap then
             // From buffer to array, via map and memcpy, including allocation
-            let destHandle = GCHandle.Alloc(dst, GCHandleType.Pinned)
+            let destHandle = GCHandle.Alloc(!dst, GCHandleType.Pinned)
             try 
                 let destPtr = destHandle.AddrOfPinnedObject()
-                let sourcePtr = computeQueue.Map<float32>(!src, true, ComputeMemoryMappingFlags.Read, (int64)0, (int64)(currSize / sizeof<float32>), null)
-                MemoryUtil.RtlMoveMemory(sourcePtr, destPtr, (uint32)currSize) 
+                let sourcePtr = computeQueue.Map<'T>(!src, true, ComputeMemoryMappingFlags.Read, (int64)0, (int64)(currSize / sizeof<'T>), null)
+                MemoryUtil.RtlMoveMemory(destPtr, sourcePtr, (uint32)currSize) 
                 computeQueue.Unmap(!src, ref sourcePtr, null)                                                                 
             finally
                 if (destHandle.IsAllocated) then
                     destHandle.Free() 
         else
-            computeQueue.ReadFromBuffer<float32>(!src, dst, true, null)
+             computeQueue.ReadFromBuffer<'T>(!src, dst, true, null)
 
         // Validate
         if validate then
             Array.iteri (fun i element -> 
-                if element <> 2.0f then
+                if element <> defValue then
                     raise (new TransferException("Source and destination do not match"))) !dst                                   
                 
     // Test copy from buffer to buffer
-    let BufferToBuffer<'T>(computeContext:ComputeContext, computeQueue:ComputeCommandQueue, currSize, validate, srcInfo:TransferEndpoint, dstInfo:TransferEndpoint, src: ComputeBuffer<float32> ref, dst: ComputeBuffer<float32> ref) =
+    let BufferToBuffer<'T when 'T: (new: unit -> 'T) and 'T: struct and 'T :> ValueType and 'T: equality>(computeContext: ComputeContext, 
+                                                                                                          computeQueue: ComputeCommandQueue, 
+                                                                                                          currSize, 
+                                                                                                          validate, 
+                                                                                                          srcInfo: TransferEndpoint, 
+                                                                                                          dstInfo: TransferEndpoint, 
+                                                                                                          src: ComputeBuffer<'T> ref, 
+                                                                                                          dst: ComputeBuffer<'T> ref,
+                                                                                                          defValue : 'T) =
         if srcInfo.ShouldMap && dstInfo.ShouldMap then
             // From buffer to buffer, via map and memcpy, including allocation
-            let destPtr = computeQueue.Map<float32>(!dst, true, ComputeMemoryMappingFlags.Write, (int64)0, (int64)(currSize / sizeof<float32>), null)
-            let sourcePtr = computeQueue.Map<float32>(!src, true, ComputeMemoryMappingFlags.Read, (int64)0, (int64)(currSize / sizeof<float32>), null)
-            MemoryUtil.RtlMoveMemory(sourcePtr, destPtr, (uint32)currSize) 
+            let destPtr = computeQueue.Map<'T>(!dst, true, ComputeMemoryMappingFlags.Write, (int64)0, (int64)(currSize / sizeof<'T>), null)
+            let sourcePtr = computeQueue.Map<'T>(!src, true, ComputeMemoryMappingFlags.Read, (int64)0, (int64)(currSize / sizeof<'T>), null)
+            MemoryUtil.RtlMoveMemory(destPtr, sourcePtr, (uint32)currSize) 
             computeQueue.Unmap(!dst, ref destPtr, null)            
             computeQueue.Unmap(!src, ref sourcePtr, null)    
         elif srcInfo.ShouldMap && (not dstInfo.ShouldMap) then
             // From buffer to buffer, via writeBuffer, including allocation
-            let sourcePtr = computeQueue.Map<float32>(!src, true, ComputeMemoryMappingFlags.Read, (int64)0, (int64)(currSize / sizeof<float32>), null)
-            computeQueue.Write<float32>(!dst, true, 0L, (int64)(currSize / sizeof<float32>), sourcePtr, null)
+            let sourcePtr = computeQueue.Map<'T>(!src, true, ComputeMemoryMappingFlags.Read, (int64)0, (int64)(currSize / sizeof<'T>), null)
+            computeQueue.Write<'T>(!dst, true, 0L, (int64)(currSize / sizeof<'T>), sourcePtr, null)
             computeQueue.Unmap(!src, ref sourcePtr, null)  
         elif (not srcInfo.ShouldMap) && dstInfo.ShouldMap then
             // From buffer to buffer, via readBuffer, including allocation
-            let destPtr = computeQueue.Map<float32>(!dst, true, ComputeMemoryMappingFlags.Write, (int64)0, (int64)(currSize / sizeof<float32>), null)
-            computeQueue.Read<float32>(!src, true, 0L, (int64)(currSize / sizeof<float32>), destPtr, null)
-            computeQueue.Unmap(!src, ref destPtr, null)
+            let destPtr = computeQueue.Map<'T>(!dst, true, ComputeMemoryMappingFlags.Write, (int64)0, (int64)(currSize / sizeof<'T>), null)
+            computeQueue.Read<'T>(!src, true, 0L, (int64)(currSize / sizeof<'T>), destPtr, null)
+            computeQueue.Unmap(!dst, ref destPtr, null)
         else                                                    
             // From buffer to buffer, via buffer copy, including allocation
-            computeQueue.CopyBuffer<float32>(!src, !dst, null)  
+            computeQueue.CopyBuffer<'T>(!src, !dst, null)  
+            computeQueue.Finish()
             
         // Validate
         if validate then
-            let finalizer = Array.zeroCreate<float32>(currSize / sizeof<float32>)
-            computeQueue.ReadFromBuffer<float32>(!dst, ref finalizer, true, null)
+            let finalizer = Array.zeroCreate<'T>(currSize / sizeof<'T>)
+            computeQueue.ReadFromBuffer<'T>(!dst, ref finalizer, true, null)
             Array.iteri (fun i element -> 
-                if element <> 2.0f then
+                if element <> defValue then
                     raise (new TransferException("Source and destination do not match"))) finalizer       
  
