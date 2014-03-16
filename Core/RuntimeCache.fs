@@ -40,6 +40,7 @@ type RuntimeKernelData(info, mtv, code) =
             for item in this.Instances do
                 (item.Value :> IDisposable).Dispose()
     
+[<AllowNullLiteral>]
 type RuntimeCache() =
     member val Kernels:Dictionary<obj, RuntimeKernelData> = Dictionary<obj, RuntimeKernelData>() with get
     member val Devices:Dictionary<int * int, RuntimeDeviceData> = new Dictionary<int * int, RuntimeDeviceData>() with get

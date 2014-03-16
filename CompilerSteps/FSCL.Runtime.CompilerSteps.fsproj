@@ -42,8 +42,6 @@
   <ItemGroup>
     <Compile Include="CacheInspectionStep.fs" />
     <Compile Include="ModulePreparsingStep.fs" />
-    <Compile Include="SeparatedCodegenStep.fs" />
-    <Compile Include="WorkSizeWrapperParsingStepProcessor.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Cloo\Cloo\Cloo.VS2010.csproj">

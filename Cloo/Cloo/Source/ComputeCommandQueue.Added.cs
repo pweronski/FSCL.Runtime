@@ -564,6 +564,26 @@ namespace Cloo
             }
         }
 
+        public void WriteToBuffer(Array source, ComputeMemory destination, bool blocking, long sourceOffset, long destinationOffset, long region, IList<ComputeEventBase> events)
+        {
+            GCHandle sourceGCHandle = GCHandle.Alloc(source, GCHandleType.Pinned);
+            IntPtr sourceOffsetPtr = Marshal.UnsafeAddrOfPinnedArrayElement(source, (int)sourceOffset);
+
+            if (blocking)
+            {
+                Write(source.GetType().GetElementType(), destination, blocking, destinationOffset, region, sourceOffsetPtr, events);
+                sourceGCHandle.Free();
+            }
+            else
+            {
+                bool userEventsWritable = (events != null && !events.IsReadOnly);
+                IList<ComputeEventBase> eventList = (userEventsWritable) ? events : Events;
+                Write(source.GetType().GetElementType(), destination, blocking, destinationOffset, region, sourceOffsetPtr, events);
+                ComputeEvent newEvent = (ComputeEvent)eventList[eventList.Count - 1];
+                newEvent.TrackGCHandle(sourceGCHandle);
+            }
+        }
+
         /// <summary>
         /// Enqueues a command to write data to a buffer.
         /// </summary>

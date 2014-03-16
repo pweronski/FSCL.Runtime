@@ -16,8 +16,6 @@ type KernelExecutionStep(tm: TypeManager,
     member this.BufferPoolManager
         with get() =
             bufferPoolManager
-        and private set(v) =
-            bufferPoolManager <- v
 
     member this.TryProcess(input:KernelExecutionInput) =
         let mutable index = 0
@@ -34,11 +32,11 @@ type KernelExecutionStep(tm: TypeManager,
             output <- processors.[index].Execute(input, this, opts) :?> KernelExecutionOutput option
             index <- index + 1
         if output.IsNone then
-            raise (KernelExecutionException("The runtime is not able to determine the way to execute kernel " + input.Node.KernelID.ToString()))
+            raise (KernelExecutionException("The runtime is not able to determine the way to execute kernel " + input.Node.Kernel.ID.ToString()))
         output.Value
 
     override this.Run((input, pool), opt) =
         opts <- opt
-        this.BufferPoolManager <- pool
+        bufferPoolManager <- pool
         let cg = this.Process(input)
-        cg
+        ValidResult(cg)

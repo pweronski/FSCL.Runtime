@@ -5,7 +5,7 @@ open System.Collections.Generic
 open System.Reflection
 open System.Reflection.Emit
 open FSCL.Compiler.Tools
-open FSCL.Compiler.KernelLanguage
+open FSCL.Compiler.Language
 open Mono.Reflection
 
 type MultithreadKernelAdaptor() =
